@@ -1,157 +1,58 @@
 const express = require("express");
-
-const app = express();
-
+const mongoose = require("mongoose");
 require("dotenv").config();
 
+const app = express();
 app.use(express.json());
 
-const connectDB = require("./connectMongo");
+const MONGO_URL =
+  process.env.MONGO_URL ||
+  "mongodb+srv://testing:Jakhar9014@vip.qrk6v.mongodb.net/?retryWrites=true&w=majority&appName=VIP";
 
-connectDB();
-
-const BookModel = require("./models/book.model");
-const redis = require('./redis')
-
-const deleteKeys = async (pattern) => {
-  const keys = await redis.keys(`${pattern}::*`)
-  console.log(keys)
-  if (keys.length > 0) {
-    redis.del(keys)
-  }
+if (!MONGO_URL) {
+  console.error("MongoDB URL is missing in environment variables");
+  process.exit(1);
 }
 
-app.get("/api/v1/books", async (req, res) => {
-  const { limit = 5, orderBy = "name", sortBy = "asc", keyword } = req.query;
-  let page = +req.query?.page;
+mongoose
+  .connect(MONGO_URL, { useNewUrlParser: true, useUnifiedTopology: true })
+  .then(() => console.log("Connected to MongoDB"))
+  .catch((err) => {
+    console.error("MongoDB Connection Error:", err);
+    process.exit(1);
+  });
 
-  if (!page || page <= 0) page = 1;
-
-  const skip = (page - 1) * + limit;
-
-  const query = {};
-
-  if (keyword) query.name = { $regex: keyword, $options: "i" };
-
-  const key = `Book::${JSON.stringify({query, page, limit, orderBy, sortBy})}`
-  let response = null
-  try {
-    const cache = await redis.get(key)
-    if (cache) {
-      response = JSON.parse(cache)
-    } else {
-      const data = await BookModel.find(query)
-      .skip(skip)
-      .limit(limit)
-      .sort({ [orderBy]: sortBy });
-      const totalItems = await BookModel.countDocuments(query);
-
-      response = {
-        msg: "Ok",
-        data,
-        totalItems,
-        totalPages: Math.ceil(totalItems / limit),
-        limit: +limit,
-        currentPage: page,
-      }
-
-      redis.setex(key, 600, JSON.stringify(response))
-    }
-    
-    return res.status(200).json(response);
-  } catch (error) {
-    return res.status(500).json({
-      msg: error.message,
-    });
-  }
+const keySchema = new mongoose.Schema({
+  key: { type: String, required: true, unique: true },
+  valid: { type: Boolean, required: true, default: true },
 });
+const Key = mongoose.model("Key", keySchema);
 
-app.get("/api/v1/books/:id", async (req, res) => {
+app.post("/verify", async (req, res) => {
   try {
-    const data = await BookModel.findById(req.params.id);
-
-    if (data) {
-      return res.status(200).json({
-        msg: "Ok",
-        data,
-      });
+    const { key } = req.body;
+    if (!key || typeof key !== "string") {
+      return res.status(400).json({ error: "Invalid key format" });
     }
 
-    return res.status(404).json({
-      msg: "Not Found",
-    });
-  } catch (error) {
-    return res.status(500).json({
-      msg: error.message,
-    });
+    const foundKey = await Key.findOne({ key }).lean();
+    if (!foundKey) {
+      return res.status(404).json({ error: "Invalid key" });
+    }
+
+    if (!foundKey.valid) {
+      return res.status(403).json({ error: "Key is no longer valid" });
+    }
+
+    res.json({ success: true, message: "Key is valid" });
+  } catch (err) {
+    console.error("Server Error:", err);
+    res.status(500).json({ error: "Internal Server Error" });
   }
 });
 
-app.post("/api/v1/books", async (req, res) => {
-  try {
-    const { name, author, price, description } = req.body;
-    const book = new BookModel({
-      name,
-      author,
-      price,
-      description,
-    });
-    const data = await book.save();
-    deleteKeys('Book')
-    return res.status(200).json({
-      msg: "Ok",
-      data,
-    });
-  } catch (error) {
-    return res.status(500).json({
-      msg: error.message,
-    });
-  }
+app.get("/", (req, res) => {
+  res.send("Key Verification API is running");
 });
 
-app.put("/api/v1/books/:id", async (req, res) => {
-  try {
-    const { name, author, price, description } = req.body;
-    const { id } = req.params;
-
-    const data = await BookModel.findByIdAndUpdate(
-      id,
-      {
-        name,
-        author,
-        price,
-        description,
-      },
-      { new: true }
-    );
-    deleteKeys('Book')
-    return res.status(200).json({
-      msg: "Ok",
-      data,
-    });
-  } catch (error) {
-    return res.status(500).json({
-      msg: error.message,
-    });
-  }
-});
-
-app.delete("/api/v1/books/:id", async (req, res) => {
-  try {
-    await BookModel.findByIdAndDelete(req.params.id);
-    deleteKeys('Book')
-    return res.status(200).json({
-      msg: "Ok",
-    });
-  } catch (error) {
-    return res.status(500).json({
-      msg: error.message,
-    });
-  }
-});
-
-const PORT = process.env.PORT;
-
-app.listen(PORT, () => {
-  console.log("Server is running on port " + PORT);
-});
+module.exports = app;
