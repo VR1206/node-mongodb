@@ -5,7 +5,7 @@ require("dotenv").config();
 
 const app = express();
 app.use(express.json());
-app.use(cors()); // Enable CORS for all origins
+app.use(cors());
 
 const MONGO_URL = process.env.MONGO_URL || "mongodb+srv://testing:Jakhar9014@vip.qrk6v.mongodb.net/access_keys?retryWrites=true&w=majority&appName=VIP";
 
@@ -26,32 +26,31 @@ const keySchema = new mongoose.Schema({
   key: { type: String, required: true, unique: true },
   used: { type: Boolean, required: true, default: false },
   deviceId: { type: String, default: null },
-  createdAt: { type: Date, default: Date.now, expires: "30d" }, // Auto-delete after 30 days
+  createdAt: { type: Date, default: Date.now, expires: "30d" },
 });
 
 const Key = mongoose.model("PREMIUM_keys", keySchema);
 
-// Generate a new key
+// ✅ **Generate Key Route**
 app.post("/generate-key", async (req, res) => {
   try {
     const key = generateKey();
     const newKey = new Key({ key });
     await newKey.save();
-
     res.json({ success: true, key });
   } catch (err) {
     console.error("Server Error:", err);
-    res.status(500).json({ error: "Internal Server Error" });
+    res.status(500).json({ success: false, message: "Internal Server Error" });
   }
 });
 
-// Verify and use key
+// ✅ **Verify Key Route (Fixed)**
 app.post("/verify-key", async (req, res) => {
   try {
     const { key, deviceId } = req.body;
 
     if (!key || !deviceId) {
-      return res.status(400).json({ success: false, message: "Key and Device ID are required" });
+      return res.status(400).json({ success: false, message: "❌ Key and Device ID are required!" });
     }
 
     const existingKey = await Key.findOne({ key });
@@ -65,7 +64,6 @@ app.post("/verify-key", async (req, res) => {
         return res.status(400).json({ success: false, message: "❌ Key already used on another device!" });
       }
     } else {
-      // Mark key as used and assign device ID if not used before
       existingKey.used = true;
       existingKey.deviceId = deviceId;
       await existingKey.save();
@@ -79,8 +77,7 @@ app.post("/verify-key", async (req, res) => {
   }
 });
 
-
-
+// ✅ **Generate a new key function**
 function generateKey() {
   const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ123456789";
   let key = "";
