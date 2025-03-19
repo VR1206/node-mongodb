@@ -49,31 +49,34 @@ app.post("/generate-key", async (req, res) => {
 app.post("/verify-key", async (req, res) => {
   try {
     const { key, deviceId } = req.body;
+
     if (!key || !deviceId) {
       return res.status(400).json({ error: "Key and Device ID are required" });
     }
 
-    const foundKey = await Key.findOne({ key });
-    if (!foundKey) {
-      return res.status(404).json({ error: "Invalid Key" });
+    const existingKey = await Key.findOne({ key });
+
+    if (!existingKey) {
+      return res.status(404).json({ success: false, message: "Invalid Key" });
     }
 
-    if (foundKey.used && foundKey.deviceId !== deviceId) {
-      return res.status(403).json({ error: "Key Already Used on Another Device" });
+    if (existingKey.used && existingKey.deviceId !== deviceId) {
+      return res.status(400).json({ success: false, message: "Key already used on another device" });
     }
 
-    if (!foundKey.used) {
-      foundKey.used = true;
-      foundKey.deviceId = deviceId;
-      await foundKey.save();
-    }
+    // Mark key as used and store device ID
+    existingKey.used = true;
+    existingKey.deviceId = deviceId;
+    await existingKey.save();
 
-    res.json({ success: true, message: "Key Verified", deviceId: foundKey.deviceId });
+    res.json({ success: true, message: "Key verified successfully" });
+
   } catch (err) {
-    console.error("Server Error:", err);
+    console.error("Verification Error:", err);
     res.status(500).json({ error: "Internal Server Error" });
   }
 });
+
 
 function generateKey() {
   const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ123456789";
