@@ -10,7 +10,7 @@ app.use(express.json());
 app.use(cors());
 
 // ✅ MongoDB Connection
-mongoose.connect(process.env.MONGO_URI, {
+mongoose.connect(process.env.MONGO_URI || "mongodb+srv://testing:Jakhar9014@vip.qrk6v.mongodb.net/PREMIUM_keys?retryWrites=true&w=majority&appName=VIP", {
     useNewUrlParser: true,
     useUnifiedTopology: true,
 })
