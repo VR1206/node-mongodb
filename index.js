@@ -29,28 +29,36 @@ const keySchema = new mongoose.Schema({
 const Key = mongoose.model("access_keys", keySchema);
 
 // API Routes
-app.post("/api/verify", async (req, res) => {
-  try {
+app.post("/verify", async (req, res) => {
     const { key, deviceId } = req.body;
-    if (!key || !deviceId) return res.status(400).json({ error: "Key and Device ID required" });
 
-    const foundKey = await Key.findOne({ key: key.toUpperCase() });
-    if (!foundKey) return res.status(404).json({ error: "Invalid key" });
+    console.log("Received Key:", key);
+    console.log("Received Device ID:", deviceId);
 
-    if (foundKey.used && foundKey.deviceId !== deviceId) {
-      return res.status(403).json({ error: "Key is already used on another device" });
+    try {
+        const foundKey = await Key.findOne({ key: key });
+
+        console.log("Found Key in DB:", foundKey);
+
+        if (!foundKey) {
+            return res.status(400).json({ error: "Invalid key" });
+        }
+
+        if (foundKey.used) {
+            return res.status(400).json({ error: "Key already used" });
+        }
+
+        foundKey.used = true;
+        foundKey.deviceId = deviceId;
+        await foundKey.save();
+
+        return res.json({ success: true, message: "Key Activated!" });
+    } catch (error) {
+        console.error("Error verifying key:", error);
+        return res.status(500).json({ error: "Internal Server Error" });
     }
-
-    foundKey.used = true;
-    foundKey.deviceId = deviceId;
-    await foundKey.save();
-
-    res.json({ success: true, message: "Key is valid and activated" });
-  } catch (err) {
-    console.error("❌ Server Error:", err);
-    res.status(500).json({ error: "Internal Server Error" });
-  }
 });
+
 
 // Root Route
 app.get("/", (req, res) => {
