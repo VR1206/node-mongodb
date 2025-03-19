@@ -15,10 +15,10 @@ if (!MONGO_URL) {
 }
 
 mongoose
-  .connect(MONGO_URL, { useNewUrlParser: true, useUnifiedTopology: true, dbName: "access_keys" }) // ✅ Ensuring correct DB
-  .then(() => console.log("Connected to MongoDB"))
+  .connect(MONGO_URL, { useNewUrlParser: true, useUnifiedTopology: true, dbName: "access_keys" })
+  .then(() => console.log("✅ Connected to MongoDB"))
   .catch((err) => {
-    console.error("MongoDB Connection Error:", err);
+    console.error("❌ MongoDB Connection Error:", err);
     process.exit(1);
   });
 
@@ -29,22 +29,22 @@ const keySchema = new mongoose.Schema({
   createdAt: { type: Date, default: Date.now, expires: "30d" },
 });
 
-const Key = mongoose.model("PREMIUM_keys", keySchema, "PREMIUM_keys"); // ✅ Ensuring correct collection name
+const Key = mongoose.model("PREMIUM_keys", keySchema, "PREMIUM_keys");
 
-// ✅ **Generate Key Route**
+// ✅ Generate New Key
 app.post("/generate-key", async (req, res) => {
   try {
     const key = generateKey();
-    const newKey = new Key({ key });
+    const newKey = new Key({ key, used: false, deviceId: null });
     await newKey.save();
     res.json({ success: true, key });
   } catch (err) {
-    console.error("Server Error:", err);
+    console.error("❌ Server Error:", err);
     res.status(500).json({ success: false, message: "Internal Server Error" });
   }
 });
 
-// ✅ **Verify Key Route**
+// ✅ Verify Key
 app.post("/verify-key", async (req, res) => {
   try {
     const { key, deviceId } = req.body;
@@ -60,34 +60,35 @@ app.post("/verify-key", async (req, res) => {
     }
 
     if (existingKey.used) {
-      if (existingKey.deviceId !== deviceId) {
-        return res.status(400).json({ success: false, message: "❌ Key already used on another device!" });
+      if (existingKey.deviceId === deviceId) {
+        return res.json({ success: true, message: "✅ Key is already activated on this device!" });
+      } else {
+        return res.status(400).json({ success: false, message: "❌ Key is already used on another device!" });
       }
     } else {
       existingKey.used = true;
       existingKey.deviceId = deviceId;
       await existingKey.save();
+      return res.json({ success: true, message: "✅ Key verified successfully!" });
     }
-
-    res.json({ success: true, message: "✅ Key verified successfully!" });
-
   } catch (err) {
-    console.error("Verification Error:", err);
-    res.status(500).json({ success: false, message: "❌ Internal Server Error" });
+    console.error("❌ Verification Error:", err);
+    res.status(500).json({ success: false, message: "Internal Server Error" });
   }
 });
 
-// ✅ **Generate a new key function**
+// ✅ Generate Key Function
 function generateKey() {
   const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ123456789";
   let key = "";
   for (let i = 0; i < 12; i++) {
-    if (i > 0 && i % 4 === 0 && i < 12) key += "-";
+    if (i > 0 && i % 4 === 0) key += "-";
     key += chars.charAt(Math.floor(Math.random() * chars.length));
   }
   return key;
 }
 
+// ✅ Test Route
 app.get("/", (req, res) => {
   res.send("Key Generation API is running");
 });
