@@ -7,13 +7,7 @@ const app = express();
 app.use(express.json());
 app.use(cors()); // Enable CORS for all origins
 
-// Fix Mongoose Deprecation Warning
-mongoose.set("strictQuery", false);
-
-// MongoDB Connection
-const MONGO_URL =
-  process.env.MONGO_URL ||
-  "mongodb+srv://testing:Jakhar9014@vip.qrk6v.mongodb.net/PREMIUM_keys?retryWrites=true&w=majority&appName=VIP";
+const MONGO_URL = process.env.MONGO_URL || "mongodb+srv://testing:Jakhar9014@vip.qrk6v.mongodb.net/PREMIUM_keys?retryWrites=true&w=majority&appName=VIP";
 
 if (!MONGO_URL) {
   console.error("MongoDB URL is missing in environment variables");
@@ -70,6 +64,7 @@ app.post("/verify-key", async (req, res) => {
       return res.status(400).json({ error: "Key already used" });
     }
 
+    // Mark key as used & store device ID
     existingKey.deviceId = deviceId;
     existingKey.used = true;
     await existingKey.save();
