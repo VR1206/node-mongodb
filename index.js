@@ -7,7 +7,7 @@ const app = express();
 app.use(express.json());
 app.use(cors()); // Enable CORS for all origins
 
-const MONGO_URL = process.env.MONGO_URL || "mongodb+srv://testing:Jakhar9014@vip.qrk6v.mongodb.net/PREMIUM_keys?retryWrites=true&w=majority&appName=VIP";
+const MONGO_URL = process.env.MONGO_URL || "mongodb+srv://testing:Jakhar9014@vip.qrk6v.mongodb.net/access_keys?retryWrites=true&w=majority&appName=VIP";
 
 if (!MONGO_URL) {
   console.error("MongoDB URL is missing in environment variables");
@@ -29,7 +29,7 @@ const keySchema = new mongoose.Schema({
   createdAt: { type: Date, default: Date.now, expires: "30d" }, // Auto-delete after 30 days
 });
 
-const Key = mongoose.model("access_keys", keySchema);
+const Key = mongoose.model("PREMIUM_keys", keySchema);
 
 // Generate a new key
 app.post("/generate-key", async (req, res) => {
