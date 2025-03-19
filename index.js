@@ -15,7 +15,7 @@ if (!MONGO_URL) {
 }
 
 mongoose
-  .connect(MONGO_URL, { useNewUrlParser: true, useUnifiedTopology: true })
+  .connect(MONGO_URL, { useNewUrlParser: true, useUnifiedTopology: true, dbName: "access_keys" }) // ✅ Ensuring correct DB
   .then(() => console.log("Connected to MongoDB"))
   .catch((err) => {
     console.error("MongoDB Connection Error:", err);
@@ -29,7 +29,7 @@ const keySchema = new mongoose.Schema({
   createdAt: { type: Date, default: Date.now, expires: "30d" },
 });
 
-const Key = mongoose.model("PREMIUM_keys", keySchema);
+const Key = mongoose.model("PREMIUM_keys", keySchema, "PREMIUM_keys"); // ✅ Ensuring correct collection name
 
 // ✅ **Generate Key Route**
 app.post("/generate-key", async (req, res) => {
@@ -44,7 +44,7 @@ app.post("/generate-key", async (req, res) => {
   }
 });
 
-// ✅ **Verify Key Route (Fixed)**
+// ✅ **Verify Key Route**
 app.post("/verify-key", async (req, res) => {
   try {
     const { key, deviceId } = req.body;
