@@ -10,7 +10,7 @@ app.use(cors());
 const MONGO_URL = process.env.MONGO_URL || "mongodb+srv://testing:Jakhar9014@vip.qrk6v.mongodb.net/access_keys?retryWrites=true&w=majority&appName=VIP";
 
 if (!MONGO_URL) {
-  console.error("MongoDB URL is missing in environment variables");
+  console.error("❌ MongoDB URL is missing in environment variables");
   process.exit(1);
 }
 
@@ -24,12 +24,12 @@ mongoose
 
 const keySchema = new mongoose.Schema({
   key: { type: String, required: true, unique: true },
-  used: { type: Boolean, required: true, default: false },
+  used: { type: Boolean, default: false },
   deviceId: { type: String, default: null },
   createdAt: { type: Date, default: Date.now, expires: "30d" },
 });
 
-const Key = mongoose.model("PREMIUM_keys", keySchema, "PREMIUM_keys");
+const Key = mongoose.model("PREMIUM_keys", keySchema);
 
 // ✅ Generate New Key
 app.post("/generate-key", async (req, res) => {
@@ -39,7 +39,7 @@ app.post("/generate-key", async (req, res) => {
     await newKey.save();
     res.json({ success: true, key });
   } catch (err) {
-    console.error("❌ Server Error:", err);
+    console.error("❌ Server Error (Generate Key):", err);
     res.status(500).json({ success: false, message: "Internal Server Error" });
   }
 });
@@ -65,12 +65,15 @@ app.post("/verify-key", async (req, res) => {
       } else {
         return res.status(400).json({ success: false, message: "❌ Key is already used on another device!" });
       }
-    } else {
-      existingKey.used = true;
-      existingKey.deviceId = deviceId;
-      await existingKey.save();
-      return res.json({ success: true, message: "✅ Key verified successfully!" });
     }
+
+    // ✅ First-time use: Activate Key
+    existingKey.used = true;
+    existingKey.deviceId = deviceId;
+    await existingKey.save();
+
+    return res.json({ success: true, message: "✅ Key verified successfully!" });
+
   } catch (err) {
     console.error("❌ Verification Error:", err);
     res.status(500).json({ success: false, message: "Internal Server Error" });
