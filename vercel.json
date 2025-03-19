@@ -8,11 +8,11 @@
   ],
   "routes": [
     {
-      "src": "/api/generate-key",
+      "src": "/generate-key",
       "dest": "/index.js"
     },
     {
-      "src": "/api/verify-key",
+      "src": "/verify-key",
       "dest": "/index.js"
     }
   ]
