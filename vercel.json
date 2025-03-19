@@ -2,22 +2,18 @@
   "version": 2,
   "builds": [
     {
-      "src": "./index.js",
+      "src": "index.js",
       "use": "@vercel/node"
     }
   ],
   "routes": [
     {
-      "src": "/(.*)",
-      "dest": "/"
+      "src": "/api/generate-key",
+      "dest": "/index.js"
     },
     {
-      "src": "/generate-key",
-      "dest": "/api/generate-key"
-    },
-    {
-      "src": "/verify-key",
-      "dest": "/api/verify-key"
+      "src": "/api/verify-key",
+      "dest": "/index.js"
     }
   ]
 }
