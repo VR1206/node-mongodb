@@ -5,9 +5,8 @@ require("dotenv").config();
 
 const app = express();
 app.use(express.json());
-app.use(cors()); // Enable CORS for all origins
+app.use(cors());
 
-// MongoDB Connection
 const MONGO_URL = process.env.MONGO_URL || "mongodb+srv://testing:Jakhar9014@vip.qrk6v.mongodb.net/PREMIUM_keys?retryWrites=true&w=majority&appName=VIP";
 
 if (!MONGO_URL) {
@@ -15,7 +14,6 @@ if (!MONGO_URL) {
   process.exit(1);
 }
 
-// Retry logic for MongoDB connection
 const connectToMongo = async () => {
   for (let i = 0; i < 3; i++) {
     try {
@@ -28,24 +26,22 @@ const connectToMongo = async () => {
         console.error("Max retries reached. Exiting...");
         process.exit(1);
       }
-      await new Promise(resolve => setTimeout(resolve, 5000)); // Wait 5 seconds before retry
+      await new Promise(resolve => setTimeout(resolve, 5000));
     }
   }
 };
 
 connectToMongo();
 
-// Key Schema
 const keySchema = new mongoose.Schema({
   key: { type: String, required: true, unique: true },
   deviceId: { type: String, default: null },
   used: { type: Boolean, default: false },
-  createdAt: { type: Date, default: Date.now, expires: "30d" }, // Auto-delete after 30 days
+  createdAt: { type: Date, default: Date.now, expires: "30d" },
 });
 
 const Key = mongoose.model("access_keys", keySchema);
 
-// Generate Key API
 app.post("/generate-key", async (req, res) => {
   try {
     const key = generateKey();
@@ -60,42 +56,38 @@ app.post("/generate-key", async (req, res) => {
   }
 });
 
-// Verify Key API
 app.post("/verify-key", async (req, res) => {
   try {
     const { key, deviceId } = req.body;
 
-    // Input validation
     if (!key || !deviceId) {
       return res.status(400).json({ error: "Key and Device ID are required" });
     }
 
-    // Normalize key to avoid case/whitespace issues
+    console.log(`Raw key received: "${key}"`);
     const normalizedKey = key.trim().toUpperCase();
+    console.log(`Normalized key: "${normalizedKey}"`);
 
-    // Fetch key from MongoDB
     const existingKey = await Key.findOne({ key: normalizedKey });
 
     if (!existingKey) {
-      console.log(`Key not found: ${normalizedKey}`);
+      console.log(`Key not found: "${normalizedKey}"`);
       return res.status(404).json({ error: "Invalid key" });
     }
 
-    // Handle missing fields by setting defaults
     const isUsed = existingKey.used || false;
     const hasDeviceId = existingKey.deviceId !== undefined && existingKey.deviceId !== null;
 
     if (isUsed && hasDeviceId) {
-      console.log(`Key already used: ${normalizedKey}, Device: ${existingKey.deviceId}`);
+      console.log(`Key already used: "${normalizedKey}", Device: ${existingKey.deviceId}`);
       return res.status(400).json({ error: "Key already used" });
     }
 
-    // Mark key as used and assign deviceId
     existingKey.deviceId = deviceId;
     existingKey.used = true;
     await existingKey.save();
 
-    console.log(`Key verified: ${normalizedKey}, Device: ${deviceId}`);
+    console.log(`Key verified: "${normalizedKey}", Device: ${deviceId}`);
     res.json({ success: true, message: "Key verified successfully" });
   } catch (err) {
     console.error("Error verifying key:", err);
@@ -103,7 +95,6 @@ app.post("/verify-key", async (req, res) => {
   }
 });
 
-// Function to generate a random key
 function generateKey() {
   const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ123456789";
   let key = "";
@@ -114,10 +105,8 @@ function generateKey() {
   return key;
 }
 
-// Home Route
 app.get("/", (req, res) => {
   res.send("Key Generation API is running");
 });
 
-// For Vercel, export the app
 module.exports = app;
