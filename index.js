@@ -5,8 +5,9 @@ require("dotenv").config();
 
 const app = express();
 app.use(express.json());
-app.use(cors());
+app.use(cors()); // Enable CORS for all origins
 
+// MongoDB Connection
 const MONGO_URL = process.env.MONGO_URL || "mongodb+srv://testing:Jakhar9014@vip.qrk6v.mongodb.net/PREMIUM_keys?retryWrites=true&w=majority&appName=VIP";
 
 if (!MONGO_URL) {
@@ -14,20 +15,32 @@ if (!MONGO_URL) {
   process.exit(1);
 }
 
-mongoose
-  .connect(MONGO_URL, { useNewUrlParser: true, useUnifiedTopology: true })
-  .then(() => console.log("Connected to MongoDB"))
-  .catch((err42) => {
-    console.error("MongoDB Connection Error:", err);
-    process.exit(1);
-  });
+// Retry logic for MongoDB connection
+const connectToMongo = async () => {
+  for (let i = 0; i < 3; i++) {
+    try {
+      await mongoose.connect(MONGO_URL, { useNewUrlParser: true, useUnifiedTopology: true });
+      console.log("Connected to MongoDB");
+      return;
+    } catch (err) {
+      console.error(`MongoDB Connection Attempt ${i + 1} Failed:`, err);
+      if (i === 2) {
+        console.error("Max retries reached. Exiting...");
+        process.exit(1);
+      }
+      await new Promise(resolve => setTimeout(resolve, 5000)); // Wait 5 seconds before retry
+    }
+  }
+};
+
+connectToMongo();
 
 // Key Schema
 const keySchema = new mongoose.Schema({
   key: { type: String, required: true, unique: true },
   deviceId: { type: String, default: null },
   used: { type: Boolean, default: false },
-  createdAt: { type: Date, default: Date.now, expires: "30d" },
+  createdAt: { type: Date, default: Date.now, expires: "30d" }, // Auto-delete after 30 days
 });
 
 const Key = mongoose.model("access_keys", keySchema);
@@ -39,6 +52,7 @@ app.post("/generate-key", async (req, res) => {
     const newKey = new Key({ key });
     await newKey.save();
 
+    console.log(`Generated key: ${key}`);
     res.json({ success: true, key });
   } catch (err) {
     console.error("Error generating key:", err);
@@ -46,7 +60,7 @@ app.post("/generate-key", async (req, res) => {
   }
 });
 
-// Verify Key API (Improved)
+// Verify Key API
 app.post("/verify-key", async (req, res) => {
   try {
     const { key, deviceId } = req.body;
@@ -56,7 +70,7 @@ app.post("/verify-key", async (req, res) => {
       return res.status(400).json({ error: "Key and Device ID are required" });
     }
 
-    // Trim and normalize key to avoid whitespace/case issues
+    // Normalize key to avoid case/whitespace issues
     const normalizedKey = key.trim().toUpperCase();
 
     // Fetch key from MongoDB
@@ -67,8 +81,11 @@ app.post("/verify-key", async (req, res) => {
       return res.status(404).json({ error: "Invalid key" });
     }
 
-    // Check if key is already used
-    if (existingKey.used && existingKey.deviceId) {
+    // Handle missing fields by setting defaults
+    const isUsed = existingKey.used || false;
+    const hasDeviceId = existingKey.deviceId !== undefined && existingKey.deviceId !== null;
+
+    if (isUsed && hasDeviceId) {
       console.log(`Key already used: ${normalizedKey}, Device: ${existingKey.deviceId}`);
       return res.status(400).json({ error: "Key already used" });
     }
@@ -102,4 +119,5 @@ app.get("/", (req, res) => {
   res.send("Key Generation API is running");
 });
 
+// For Vercel, export the app
 module.exports = app;
