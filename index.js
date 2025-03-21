@@ -65,8 +65,11 @@ app.post("/verify-key", async (req, res) => {
     }
 
     console.log(`Raw key received: "${key}"`);
+    console.log(`Raw key bytes: ${Buffer.from(key).toString("hex")}`);
+
     const normalizedKey = key.trim().toUpperCase();
     console.log(`Normalized key: "${normalizedKey}"`);
+    console.log(`Normalized key bytes: ${Buffer.from(normalizedKey).toString("hex")}`);
 
     const existingKey = await Key.findOne({ key: normalizedKey });
 
