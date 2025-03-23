@@ -33,15 +33,17 @@ const connectToMongo = async () => {
 
 connectToMongo();
 
+// Updated Schema with deviceId, removed username
 const keySchema = new mongoose.Schema({
   key: { type: String, required: true, unique: true },
-  deviceId: { type: String, default: null },
+  deviceId: { type: String, default: null }, // Back to deviceId
   used: { type: Boolean, default: false },
   createdAt: { type: Date, default: Date.now, expires: "30d" },
 });
 
 const Key = mongoose.model("access_keys", keySchema);
 
+// Generate Key Endpoint
 app.post("/generate-key", async (req, res) => {
   try {
     const key = generateKey();
@@ -56,6 +58,7 @@ app.post("/generate-key", async (req, res) => {
   }
 });
 
+// Original Verify Key Endpoint with deviceId
 app.post("/verify-key", async (req, res) => {
   try {
     const { key, deviceId } = req.body;
@@ -64,13 +67,7 @@ app.post("/verify-key", async (req, res) => {
       return res.status(400).json({ error: "Key and Device ID are required" });
     }
 
-    console.log(`Raw key received: "${key}"`);
-    console.log(`Raw key bytes: ${Buffer.from(key).toString("hex")}`);
-
     const normalizedKey = key.trim().toUpperCase();
-    console.log(`Normalized key: "${normalizedKey}"`);
-    console.log(`Normalized key bytes: ${Buffer.from(normalizedKey).toString("hex")}`);
-
     const existingKey = await Key.findOne({ key: normalizedKey });
 
     if (!existingKey) {
@@ -98,6 +95,48 @@ app.post("/verify-key", async (req, res) => {
   }
 });
 
+// New Verify Access Key Function with deviceId
+async function verifyAccessKey(key, deviceId) {
+  try {
+    const normalizedKey = key.trim().toUpperCase();
+    const keyExists = await Key.findOne({ key: normalizedKey });
+
+    if (!keyExists) {
+      return { success: false, status: "invalid", message: "Invalid Access Key" };
+    }
+
+    if (keyExists.used && keyExists.deviceId !== deviceId) {
+      return { success: false, status: "used", message: "This key has already been used by another device" };
+    }
+
+    if (!keyExists.used) {
+      // Update key with deviceId if unused
+      await Key.updateOne(
+        { key: normalizedKey },
+        { $set: { used: true, deviceId } }
+      );
+    }
+
+    return { success: true, status: "valid", message: "Access Key verified successfully" };
+  } catch (error) {
+    console.error("Error in verifyAccessKey:", error);
+    return { success: false, status: "error", message: "An error occurred during verification" };
+  }
+}
+
+// New Verify Endpoint with deviceId
+app.post("/verify", async (req, res) => {
+  const { key, deviceId } = req.body;
+
+  if (!key || !deviceId) {
+    return res.status(400).json({ success: false, message: "Missing required fields: key, deviceId" });
+  }
+
+  const result = await verifyAccessKey(key, deviceId);
+  res.status(result.success ? 200 : 403).json(result);
+});
+
+// Key Generation Function
 function generateKey() {
   const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ123456789";
   let key = "";
@@ -108,8 +147,10 @@ function generateKey() {
   return key;
 }
 
+// Root Endpoint
 app.get("/", (req, res) => {
   res.send("Key Generation API is running");
 });
 
-module.exports = app;
+// Export App and Function
+module.exports = { app, verifyAccessKey };
