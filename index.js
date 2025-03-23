@@ -7,6 +7,9 @@ const app = express();
 app.use(express.json());
 app.use(cors());
 
+// Mongoose strictQuery setting to suppress warning
+mongoose.set('strictQuery', true);
+
 const MONGO_URL = process.env.MONGO_URL || "mongodb+srv://testing:Jakhar9014@vip.qrk6v.mongodb.net/PREMIUM_keys?retryWrites=true&w=majority&appName=VIP";
 
 if (!MONGO_URL) {
@@ -33,17 +36,15 @@ const connectToMongo = async () => {
 
 connectToMongo();
 
-// Updated Schema with deviceId, removed username
 const keySchema = new mongoose.Schema({
   key: { type: String, required: true, unique: true },
-  deviceId: { type: String, default: null }, // Back to deviceId
+  deviceId: { type: String, default: null },
   used: { type: Boolean, default: false },
   createdAt: { type: Date, default: Date.now, expires: "30d" },
 });
 
 const Key = mongoose.model("access_keys", keySchema);
 
-// Generate Key Endpoint
 app.post("/generate-key", async (req, res) => {
   try {
     const key = generateKey();
@@ -58,7 +59,6 @@ app.post("/generate-key", async (req, res) => {
   }
 });
 
-// Original Verify Key Endpoint with deviceId
 app.post("/verify-key", async (req, res) => {
   try {
     const { key, deviceId } = req.body;
@@ -95,7 +95,7 @@ app.post("/verify-key", async (req, res) => {
   }
 });
 
-// New Verify Access Key Function with deviceId
+// New Verify Access Key Function
 async function verifyAccessKey(key, deviceId) {
   try {
     const normalizedKey = key.trim().toUpperCase();
@@ -110,7 +110,6 @@ async function verifyAccessKey(key, deviceId) {
     }
 
     if (!keyExists.used) {
-      // Update key with deviceId if unused
       await Key.updateOne(
         { key: normalizedKey },
         { $set: { used: true, deviceId } }
@@ -124,7 +123,6 @@ async function verifyAccessKey(key, deviceId) {
   }
 }
 
-// New Verify Endpoint with deviceId
 app.post("/verify", async (req, res) => {
   const { key, deviceId } = req.body;
 
@@ -136,7 +134,6 @@ app.post("/verify", async (req, res) => {
   res.status(result.success ? 200 : 403).json(result);
 });
 
-// Key Generation Function
 function generateKey() {
   const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ123456789";
   let key = "";
@@ -147,10 +144,9 @@ function generateKey() {
   return key;
 }
 
-// Root Endpoint
 app.get("/", (req, res) => {
   res.send("Key Generation API is running");
 });
 
-// Export App and Function
-module.exports = { app, verifyAccessKey };
+// Export only the app for serverless compatibility
+module.exports = app;
