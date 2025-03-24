@@ -7,8 +7,8 @@ const app = express();
 app.use(express.json());
 app.use(cors());
 
+// MongoDB connection setup
 mongoose.set("strictQuery", true);
-
 const MONGO_URL = process.env.MONGO_URL || "mongodb+srv://testing:Jakhar9014@vip.qrk6v.mongodb.net/PREMIUM_keys?retryWrites=true&w=majority&appName=VIP";
 
 if (!MONGO_URL) {
@@ -17,41 +17,47 @@ if (!MONGO_URL) {
 }
 
 const connectToMongo = async () => {
-  let attempts = 0;
-  while (attempts < 5) {
-    try {
-      await mongoose.connect(MONGO_URL, { useNewUrlParser: true, useUnifiedTopology: true });
-      console.log("✅ Connected to MongoDB");
-      return;
-    } catch (err) {
-      attempts++;
-      console.error(`⚠️ MongoDB Connection Attempt ${attempts} Failed:`, err);
-      if (attempts >= 5) {
-        console.error("❌ Max retries reached. Exiting...");
-        process.exit(1);
-      }
-      await new Promise(resolve => setTimeout(resolve, 5000));
-    }
+  try {
+    await mongoose.connect(MONGO_URL, {
+      useNewUrlParser: true,
+      useUnifiedTopology: true,
+      serverSelectionTimeoutMS: 5000, // Faster timeout for connection
+    });
+    console.log("✅ Connected to MongoDB");
+  } catch (err) {
+    console.error("❌ MongoDB Connection Failed:", err);
+    process.exit(1);
   }
 };
 
 connectToMongo();
 
+// Key Schema with indexing for faster queries
 const keySchema = new mongoose.Schema({
-  key: { type: String, required: true, unique: true },
+  key: { type: String, required: true, unique: true, index: true }, // Indexed for faster lookup
   deviceId: { type: String, default: null },
-  used: { type: Boolean, default: false },
+  used: { type: Boolean, default: false, index: true }, // Indexed for faster filtering
   createdAt: { type: Date, default: Date.now, expires: "30d" },
 });
 
 const Key = mongoose.model("access_keys", keySchema);
 
+// Faster Key Generation Function
+function generateKey() {
+  const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ123456789";
+  let key = "";
+  for (let i = 0; i < 12; i++) {
+    if (i > 0 && i % 4 === 0) key += "-";
+    key += chars[Math.floor(Math.random() * chars.length)];
+  }
+  return key;
+}
+
+// Generate Key Endpoint
 app.post("/generate-key", async (req, res) => {
   try {
     const key = generateKey();
-    const newKey = new Key({ key });
-    await newKey.save();
-
+    await Key.create({ key }); // Use create() for single operation
     console.log(`🔑 Generated key: ${key}`);
     res.json({ success: true, key });
   } catch (err) {
@@ -60,6 +66,7 @@ app.post("/generate-key", async (req, res) => {
   }
 });
 
+// Verify Key Endpoint
 app.post("/verify-key", async (req, res) => {
   try {
     const { key, deviceId } = req.body;
@@ -69,7 +76,7 @@ app.post("/verify-key", async (req, res) => {
     }
 
     const normalizedKey = key.trim().toUpperCase();
-    const existingKey = await Key.findOne({ key: normalizedKey });
+    const existingKey = await Key.findOne({ key: normalizedKey }).lean(); // Use lean() for faster reads
 
     if (!existingKey) {
       console.log(`❌ Key not found: "${normalizedKey}"`);
@@ -82,9 +89,11 @@ app.post("/verify-key", async (req, res) => {
     }
 
     if (!existingKey.used) {
-      existingKey.deviceId = deviceId;
-      existingKey.used = true;
-      await existingKey.save();
+      await Key.updateOne(
+        { key: normalizedKey },
+        { $set: { deviceId, used: true } },
+        { w: "majority" } // Ensure write consistency
+      );
     }
 
     console.log(`✅ Key verified: "${normalizedKey}", Device: ${deviceId}`);
@@ -95,18 +104,8 @@ app.post("/verify-key", async (req, res) => {
   }
 });
 
-// 🔑 Improved Key Generation Function
-function generateKey() {
-  const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ123456789";
-  return Array(12)
-    .fill(null)
-    .map((_, i) => (i > 0 && i % 4 === 0 ? "-" : chars[Math.floor(Math.random() * chars.length)]))
-    .join("");
-}
-
 app.get("/", (req, res) => {
   res.send("🚀 Key Generation And Verify API is running");
 });
 
-// Export app for serverless compatibility
 module.exports = app;
