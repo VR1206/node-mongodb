@@ -7,76 +7,59 @@ const app = express();
 app.use(express.json());
 app.use(cors());
 
-// MongoDB connection setup
 mongoose.set("strictQuery", true);
-const MONGO_URL = process.env.MONGO_URL || "mongodb+srv://testing:Jakhar9014@vip.qrk6v.mongodb.net/PREMIUM_keys?retryWrites=true&w=majority&appName=VIP";
 
-if (!MONGO_URL) {
-  console.error("❌ MongoDB URL is missing in environment variables");
-  process.exit(1);
-}
+const MONGO_URL =
+  process.env.MONGO_URL ||
+  "mongodb+srv://testing:Jakhar9014@vip.qrk6v.mongodb.net/PREMIUM_keys?retryWrites=true&w=majority&appName=VIP";
 
-const connectToMongo = async () => {
-  try {
-    await mongoose.connect(MONGO_URL, {
-      useNewUrlParser: true,
-      useUnifiedTopology: true,
-      serverSelectionTimeoutMS: 5000, // Faster timeout for connection
-    });
-    console.log("✅ Connected to MongoDB");
-  } catch (err) {
+mongoose
+  .connect(MONGO_URL, { useNewUrlParser: true, useUnifiedTopology: true })
+  .then(() => console.log("✅ Connected to MongoDB"))
+  .catch((err) => {
     console.error("❌ MongoDB Connection Failed:", err);
     process.exit(1);
-  }
-};
+  });
 
-connectToMongo();
-
-// Key Schema with indexing for faster queries
-const keySchema = new mongoose.Schema({
-  key: { type: String, required: true, unique: true, index: true }, // Indexed for faster lookup
-  deviceId: { type: String, default: null },
-  used: { type: Boolean, default: false, index: true }, // Indexed for faster filtering
-  createdAt: { type: Date, default: Date.now, expires: "30d" },
-});
+const keySchema = new mongoose.Schema(
+  {
+    key: { type: String, required: true, unique: true, index: true },
+    deviceId: { type: String, default: null },
+    used: { type: Boolean, default: false },
+    createdAt: { type: Date, default: Date.now, expires: "30d" },
+  },
+  { timestamps: true }
+);
 
 const Key = mongoose.model("access_keys", keySchema);
 
-// Faster Key Generation Function
-function generateKey() {
-  const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ123456789";
-  let key = "";
-  for (let i = 0; i < 12; i++) {
-    if (i > 0 && i % 4 === 0) key += "-";
-    key += chars[Math.floor(Math.random() * chars.length)];
-  }
-  return key;
-}
-
-// Generate Key Endpoint
+// 🔑 Batch Key Generation Support
 app.post("/generate-key", async (req, res) => {
   try {
-    const key = generateKey();
-    await Key.create({ key }); // Use create() for single operation
-    console.log(`🔑 Generated key: ${key}`);
-    res.json({ success: true, key });
+    const { count = 1 } = req.body; // Default ek key generate karega
+    const keys = Array.from({ length: Math.min(count, 10) }, generateKey).map(
+      (key) => ({ key })
+    );
+
+    await Key.insertMany(keys);
+    console.log(`🔑 ${keys.length} Keys Generated`);
+
+    res.json({ success: true, keys: keys.map((k) => k.key) });
   } catch (err) {
-    console.error("❌ Error generating key:", err);
+    console.error("❌ Error generating keys:", err);
     res.status(500).json({ success: false, message: "Internal Server Error" });
   }
 });
 
-// Verify Key Endpoint
 app.post("/verify-key", async (req, res) => {
   try {
     const { key, deviceId } = req.body;
-
     if (!key || !deviceId) {
       return res.status(400).json({ success: false, message: "Key and Device ID are required" });
     }
 
     const normalizedKey = key.trim().toUpperCase();
-    const existingKey = await Key.findOne({ key: normalizedKey }).lean(); // Use lean() for faster reads
+    const existingKey = await Key.findOne({ key: normalizedKey }).lean(); // Lean query for faster execution
 
     if (!existingKey) {
       console.log(`❌ Key not found: "${normalizedKey}"`);
@@ -89,11 +72,7 @@ app.post("/verify-key", async (req, res) => {
     }
 
     if (!existingKey.used) {
-      await Key.updateOne(
-        { key: normalizedKey },
-        { $set: { deviceId, used: true } },
-        { w: "majority" } // Ensure write consistency
-      );
+      await Key.updateOne({ key: normalizedKey }, { used: true, deviceId });
     }
 
     console.log(`✅ Key verified: "${normalizedKey}", Device: ${deviceId}`);
@@ -103,6 +82,14 @@ app.post("/verify-key", async (req, res) => {
     res.status(500).json({ success: false, message: "Internal Server Error" });
   }
 });
+
+// 🔑 Optimized Key Generation Function
+function generateKey() {
+  const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ123456789";
+  return Array.from({ length: 12 }, (_, i) =>
+    i > 0 && i % 4 === 0 ? "-" : chars[Math.floor(Math.random() * chars.length)]
+  ).join("");
+}
 
 app.get("/", (req, res) => {
   res.send("🚀 Key Generation And Verify API is running");
