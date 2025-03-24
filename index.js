@@ -33,10 +33,10 @@ const keySchema = new mongoose.Schema(
 
 const Key = mongoose.model("access_keys", keySchema);
 
-// 🔑 Batch Key Generation Support
+// 🔑 Batch Key Generation API
 app.post("/generate-key", async (req, res) => {
   try {
-    const { count = 1 } = req.body; // Default ek key generate karega
+    const { count = 1 } = req.body; // Default: Ek key generate karega
     const keys = Array.from({ length: Math.min(count, 10) }, generateKey).map(
       (key) => ({ key })
     );
@@ -51,6 +51,7 @@ app.post("/generate-key", async (req, res) => {
   }
 });
 
+// ✅ Key Verification API
 app.post("/verify-key", async (req, res) => {
   try {
     const { key, deviceId } = req.body;
@@ -59,23 +60,25 @@ app.post("/verify-key", async (req, res) => {
     }
 
     const normalizedKey = key.trim().toUpperCase();
-    const existingKey = await Key.findOne({ key: normalizedKey }).lean(); // Lean query for faster execution
+    const normalizedDeviceId = deviceId.trim().toLowerCase(); // Normalize device ID for consistency
+
+    const existingKey = await Key.findOne({ key: normalizedKey }).lean();
 
     if (!existingKey) {
       console.log(`❌ Key not found: "${normalizedKey}"`);
       return res.json({ success: false, message: "Invalid key" });
     }
 
-    if (existingKey.used && existingKey.deviceId !== deviceId) {
+    if (existingKey.used && existingKey.deviceId !== normalizedDeviceId) {
       console.log(`❌ Key already used: "${normalizedKey}", Device: ${existingKey.deviceId}`);
       return res.json({ success: false, message: "This key has already been used by another device" });
     }
 
     if (!existingKey.used) {
-      await Key.updateOne({ key: normalizedKey }, { used: true, deviceId });
+      await Key.updateOne({ key: normalizedKey }, { used: true, deviceId: normalizedDeviceId });
     }
 
-    console.log(`✅ Key verified: "${normalizedKey}", Device: ${deviceId}`);
+    console.log(`✅ Key verified: "${normalizedKey}", Device: ${normalizedDeviceId}`);
     res.json({ success: true, message: "Key verified successfully" });
   } catch (err) {
     console.error("❌ Error verifying key:", err);
@@ -83,12 +86,17 @@ app.post("/verify-key", async (req, res) => {
   }
 });
 
-// 🔑 Optimized Key Generation Function
+// 🔑 Optimized Key Generation Function (Fixed Hyphen Placement)
 function generateKey() {
   const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ123456789";
-  return Array.from({ length: 12 }, (_, i) =>
-    i > 0 && i % 4 === 0 ? "-" : chars[Math.floor(Math.random() * chars.length)]
-  ).join("");
+  let key = "";
+
+  for (let i = 0; i < 12; i++) {
+    if (i > 0 && i % 4 === 0) key += "-"; // Hyphen har 4 characters ke baad
+    key += chars.charAt(Math.floor(Math.random() * chars.length));
+  }
+
+  return key;
 }
 
 app.get("/", (req, res) => {
