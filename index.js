@@ -105,7 +105,7 @@ function generateKey() {
 }
 
 app.get("/", (req, res) => {
-  res.send("✅ Key Generation API is running");
+  res.send("🚀 Key Generation And Verify API is running");
 });
 
 // Export app for serverless compatibility
