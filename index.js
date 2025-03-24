@@ -9,53 +9,44 @@ app.use(cors());
 
 mongoose.set("strictQuery", true);
 
-const MONGO_URL = process.env.MONGO_URL || "mongodb+srv://testing:Jakhar9014@vip.qrk6v.mongodb.net/PREMIUM_keys?retryWrites=true&w=majority&appName=VIP";
+const MONGO_URL =
+  process.env.MONGO_URL ||
+  "mongodb+srv://testing:Jakhar9014@vip.qrk6v.mongodb.net/PREMIUM_keys?retryWrites=true&w=majority&appName=VIP";
 
-if (!MONGO_URL) {
-  console.error("❌ MongoDB URL is missing in environment variables");
-  process.exit(1);
-}
+mongoose
+  .connect(MONGO_URL, { useNewUrlParser: true, useUnifiedTopology: true })
+  .then(() => console.log("✅ Connected to MongoDB"))
+  .catch((err) => {
+    console.error("❌ MongoDB Connection Failed:", err);
+    process.exit(1);
+  });
 
-const connectToMongo = async () => {
-  let attempts = 0;
-  while (attempts < 5) {
-    try {
-      await mongoose.connect(MONGO_URL, { useNewUrlParser: true, useUnifiedTopology: true });
-      console.log("✅ Connected to MongoDB");
-      return;
-    } catch (err) {
-      attempts++;
-      console.error(`⚠️ MongoDB Connection Attempt ${attempts} Failed:`, err);
-      if (attempts >= 5) {
-        console.error("❌ Max retries reached. Exiting...");
-        process.exit(1);
-      }
-      await new Promise(resolve => setTimeout(resolve, 5000));
-    }
-  }
-};
-
-connectToMongo();
-
-const keySchema = new mongoose.Schema({
-  key: { type: String, required: true, unique: true },
-  deviceId: { type: String, default: null },
-  used: { type: Boolean, default: false },
-  createdAt: { type: Date, default: Date.now, expires: "30d" },
-});
+const keySchema = new mongoose.Schema(
+  {
+    key: { type: String, required: true, unique: true, index: true },
+    deviceId: { type: String, default: null },
+    used: { type: Boolean, default: false },
+    createdAt: { type: Date, default: Date.now, expires: "30d" },
+  },
+  { timestamps: true }
+);
 
 const Key = mongoose.model("access_keys", keySchema);
 
+// 🔑 Batch Key Generation Support
 app.post("/generate-key", async (req, res) => {
   try {
-    const key = generateKey();
-    const newKey = new Key({ key });
-    await newKey.save();
+    const { count = 1 } = req.body; // Default ek key generate karega
+    const keys = Array.from({ length: Math.min(count, 10) }, generateKey).map(
+      (key) => ({ key })
+    );
 
-    console.log(`🔑 Generated key: ${key}`);
-    res.json({ success: true, key });
+    await Key.insertMany(keys);
+    console.log(`🔑 ${keys.length} Keys Generated`);
+
+    res.json({ success: true, keys: keys.map((k) => k.key) });
   } catch (err) {
-    console.error("❌ Error generating key:", err);
+    console.error("❌ Error generating keys:", err);
     res.status(500).json({ success: false, message: "Internal Server Error" });
   }
 });
@@ -63,13 +54,12 @@ app.post("/generate-key", async (req, res) => {
 app.post("/verify-key", async (req, res) => {
   try {
     const { key, deviceId } = req.body;
-
     if (!key || !deviceId) {
       return res.status(400).json({ success: false, message: "Key and Device ID are required" });
     }
 
     const normalizedKey = key.trim().toUpperCase();
-    const existingKey = await Key.findOne({ key: normalizedKey });
+    const existingKey = await Key.findOne({ key: normalizedKey }).lean(); // Lean query for faster execution
 
     if (!existingKey) {
       console.log(`❌ Key not found: "${normalizedKey}"`);
@@ -82,9 +72,7 @@ app.post("/verify-key", async (req, res) => {
     }
 
     if (!existingKey.used) {
-      existingKey.deviceId = deviceId;
-      existingKey.used = true;
-      await existingKey.save();
+      await Key.updateOne({ key: normalizedKey }, { used: true, deviceId });
     }
 
     console.log(`✅ Key verified: "${normalizedKey}", Device: ${deviceId}`);
@@ -95,18 +83,16 @@ app.post("/verify-key", async (req, res) => {
   }
 });
 
-// 🔑 Improved Key Generation Function
+// 🔑 Optimized Key Generation Function
 function generateKey() {
   const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ123456789";
-  return Array(12)
-    .fill(null)
-    .map((_, i) => (i > 0 && i % 4 === 0 ? "-" : chars[Math.floor(Math.random() * chars.length)]))
-    .join("");
+  return Array.from({ length: 12 }, (_, i) =>
+    i > 0 && i % 4 === 0 ? "-" : chars[Math.floor(Math.random() * chars.length)]
+  ).join("");
 }
 
 app.get("/", (req, res) => {
   res.send("🚀 Key Generation And Verify API is running");
 });
 
-// Export app for serverless compatibility
 module.exports = app;
